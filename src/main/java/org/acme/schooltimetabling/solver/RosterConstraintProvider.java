@@ -8,39 +8,60 @@ import org.optaplanner.core.api.score.stream.ConstraintProvider;
 import org.optaplanner.core.api.score.stream.Joiners;
 
 /**
- * Constraint provider for the Roster scheduling problem.
- * This class defines the constraints used by Optaplanner to solve the
- * scheduling problem for assigning shifts to employees.
- * It includes hard constraints that must be satisfied,
- * such as ensuring that an employee does not have overlapping shifts.
- * Hard constraints are conditions that must always be met for a valid solution.
- * 
- * Soft constraints are preferences that can be optimized but are not mandatory.
+ * ENHANCED constraint provider with two-level date/time checking
  */
 public class RosterConstraintProvider implements ConstraintProvider {
 
-        @Override
-        public Constraint[] defineConstraints(ConstraintFactory constraintFactory) {
-                return new Constraint[] {
-                                // Hard constraints
-                                employeeOverlappingShiftConflict(constraintFactory)
-                                // Soft constraints are only implemented in the optaplanner-quickstarts code
-                };
-        }
+    @Override
+    public Constraint[] defineConstraints(ConstraintFactory constraintFactory) {
+        return new Constraint[] {
+                // Hard constraints
+                employeeConflictingSameDayOverlappingShifts(constraintFactory),
+                employeeCannotWorkIncompatibleShiftPattern(constraintFactory),
 
-        // ! HARD: An employee can only work one shift at a time
-        Constraint employeeOverlappingShiftConflict(ConstraintFactory constraintFactory) {
-                return constraintFactory
-                                .forEach(Shift.class)
-                                .join(Shift.class,
-                                                // Join shifts assigned to the same employee
-                                                Joiners.equal(Shift::getAssignedEmployee),
-                                                // Ensure shifts overlap in time
-                                                Joiners.overlapping(Shift::getStartTime, Shift::getEndTime),
-                                                // To prevent double counting
-                                                Joiners.lessThan(Shift::getShiftDayId))
-                                .penalize(HardSoftScore.ONE_HARD)
-                                .asConstraint("Employee cannot work overlapping shifts");
-        }
+                // Soft constraints
+                preferFewerUnassignedShifts(constraintFactory),
+        };
+    }
 
+    /**
+     * HARD: Employee cannot work overlapping shifts on the same day
+     * Two-level check: (1) Same date AND (2) Overlapping times
+     */
+    Constraint employeeConflictingSameDayOverlappingShifts(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEach(Shift.class)
+                .join(Shift.class,
+                        // Level 1: Same employee assigned
+                        Joiners.equal(Shift::getAssignedEmployee),
+                        // Level 2: Same date
+                        Joiners.equal(Shift::getShiftDate),
+                        // Prevent duplicate pairs
+                        Joiners.lessThan(Shift::getShiftDayId))
+                // Level 3: Check time overlap and ensure employee is assigned
+                .filter((shift1, shift2) -> shift1.getAssignedEmployee() != null &&
+                        shift1.overlapsTime(shift2))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Employee cannot work overlapping shifts on same day");
+    }
+
+    /**
+     * HARD: Employee can only work shift patterns they're qualified for
+     */
+    Constraint employeeCannotWorkIncompatibleShiftPattern(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEach(Shift.class)
+                .filter(shift -> shift.getAssignedEmployee() != null &&
+                        !shift.getAssignedEmployee().canWorkShiftPattern(shift.getShiftPatternId()))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Employee cannot work incompatible shift pattern");
+    }
+
+    /**
+     * SOFT: Minimize unassigned shifts
+     */
+    Constraint preferFewerUnassignedShifts(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEach(Shift.class)
+                .filter(shift -> shift.getAssignedEmployee() == null)
+                .penalize(HardSoftScore.ONE_SOFT)
+                .asConstraint("Prefer fewer unassigned shifts");
+    }
 }

@@ -1,12 +1,13 @@
 package org.acme.schooltimetabling.domain;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import org.optaplanner.core.api.domain.entity.PlanningEntity;
 import org.optaplanner.core.api.domain.lookup.PlanningId;
 import org.optaplanner.core.api.domain.variable.PlanningVariable;
 
-/** 
+/**
  * Represents a shift.
  * A shift is defined by its unique ID, name, start and end times, job site,
  * and the employee assigned to it.
@@ -18,19 +19,25 @@ import org.optaplanner.core.api.domain.variable.PlanningVariable;
 public class Shift {
 
     @PlanningId
-    private Long id; // Unique identifier for the lesson
+    private String shiftDayId; // Within each shift pattern, shift day - eg. Monday, Tuesday, etc. - actually
+                               // unique
 
-    private Long ShiftId;
-    private String shiftName;
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
-    private String jobSite;
+    private String originalShiftDayId; // Original ID from the database - used for output
+    private String shiftPatternId; // Shift type - eg. morning, evening, off-day - many shifts with same pattern
+    private String shiftPatternName; // Name of the shift pattern - for easy reference
+
+    private String shiftTime;
+    private LocalDateTime date;
+
+    private int openings; // Number of openings for this shift - always 1 after processing
+    private int currentNumConfirmedShifts; // Number of confirmed shifts for this shift - always 0 after processing
 
     /**
      * Planning variables are used by Optaplanner to determine the optimal
      * assignment of resources.
      * They are mutable and can change during the planning process.
-     * In this case, the timeslot and room are planning variables for the lesson.
+     * In this case, the assignedEmployee variable represents the employee
+     * assigned to this shift.
      * They will be assigned during the planning phase to find the best schedule.
      */
     @PlanningVariable
@@ -40,60 +47,130 @@ public class Shift {
         // Default constructor
     }
 
-    public Shift(Long id, Long shiftId, String shiftName, LocalDateTime startTime, LocalDateTime endTime,
-            String jobSite) {
-        this.id = id;
-        this.ShiftId = shiftId;
-        this.shiftName = shiftName;
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.jobSite = jobSite;
+    public Shift(String shiftDayId, String shiftPatternId, String shiftPatternName,
+            String shiftTime, LocalDateTime date, int openings, int currentNumConfirmedShifts) {
+        this.shiftDayId = shiftDayId;
+        this.originalShiftDayId = shiftDayId; // Default to same ID
+        this.shiftPatternId = shiftPatternId;
+        this.shiftPatternName = shiftPatternName;
+        this.shiftTime = shiftTime;
+        this.date = date;
+        this.openings = openings;
+        this.currentNumConfirmedShifts = currentNumConfirmedShifts;
+    }
+
+    // Constructor with original shift day ID for tracking multiple openings
+    public Shift(String shiftDayId, String originalShiftDayId, String shiftPatternId,
+            String shiftPatternName, String shiftTime, LocalDateTime date,
+            int openings, int currentNumConfirmedShifts) {
+        this.shiftDayId = shiftDayId;
+        this.originalShiftDayId = originalShiftDayId;
+        this.shiftPatternId = shiftPatternId;
+        this.shiftPatternName = shiftPatternName;
+        this.shiftTime = shiftTime;
+        this.date = date;
+        this.openings = openings;
+        this.currentNumConfirmedShifts = currentNumConfirmedShifts;
     }
 
     // Getters
-    public Long getId() {
-        return id;
+    public String getShiftDayId() {
+        return shiftDayId;
     }
 
-    public Long getShiftId() {
-        return ShiftId;
+    public String getOriginalShiftDayId() {
+        return originalShiftDayId;
     }
 
-    public String getShiftName() {
-        return shiftName;
+    public String getShiftPatternId() {
+        return shiftPatternId;
     }
 
-    public LocalDateTime getStartTime() {
-        return startTime;
+    public String getShiftPatternName() {
+        return shiftPatternName;
     }
 
-    public LocalDateTime getEndTime() {
-        return endTime;
+    public String getShiftTime() {
+        return shiftTime;
     }
 
-    public String getJobSite() {
-        return jobSite;
+    public LocalDateTime getDate() {
+        return date;
+    }
+
+    public int getOpenings() {
+        return openings;
+    }
+
+    public int getCurrentNumConfirmedShifts() {
+        return currentNumConfirmedShifts;
     }
 
     public Employee getAssignedEmployee() {
         return assignedEmployee;
     }
 
-    // Setters - these are used by Optaplanner during the planning phase
+    // Setters
+    public void setShiftDayId(String shiftDayId) {
+        this.shiftDayId = shiftDayId;
+    }
+
+    public void setOriginalShiftDayId(String originalShiftDayId) {
+        this.originalShiftDayId = originalShiftDayId;
+    }
+
+    public void setShiftPatternId(String shiftPatternId) {
+        this.shiftPatternId = shiftPatternId;
+    }
+
+    public void setShiftPatternName(String shiftPatternName) {
+        this.shiftPatternName = shiftPatternName;
+    }
+
+    public void setShiftTime(String shiftTime) {
+        this.shiftTime = shiftTime;
+    }
+
+    public void setDate(LocalDateTime date) {
+        this.date = date;
+    }
+
+    public void setOpenings(int openings) {
+        this.openings = openings;
+    }
+
+    public void setCurrentNumConfirmedShifts(int currentNumConfirmedShifts) {
+        this.currentNumConfirmedShifts = currentNumConfirmedShifts;
+    }
+
     public void setAssignedEmployee(Employee assignedEmployee) {
         this.assignedEmployee = assignedEmployee;
+    }
+
+    /**
+     * Gets the date formatted for output (e.g., "26/May/2025")
+     */
+    public String getFormattedDate() {
+        if (date == null)
+            return "";
+        return date.format(DateTimeFormatter.ofPattern("dd/MMM/yyyy"));
+    }
+
+    /**
+     * Checks if this shift can be worked by the given employee
+     */
+    public boolean canBeWorkedBy(Employee employee) {
+        return employee != null && employee.canWorkShiftPattern(this.shiftPatternId);
     }
 
     @Override
     public String toString() {
         return "Shift{" +
-                "id=" + id +
-                ", ShiftId=" + ShiftId +
-                ", shiftName='" + shiftName + '\'' +
-                ", startTime=" + startTime +
-                ", endTime=" + endTime +
-                ", jobSite='" + jobSite + '\'' +
-                ", assignedEmployee=" + assignedEmployee +
+                "shiftDayId='" + shiftDayId + '\'' +
+                ", shiftPatternName='" + shiftPatternName + '\'' +
+                ", shiftTime='" + shiftTime + '\'' +
+                ", date=" + (date != null ? date.toLocalDate() : "null") +
+                ", assignedEmployee=" + (assignedEmployee != null ? assignedEmployee.getUniqueId() : "None") +
                 '}';
     }
 }

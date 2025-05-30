@@ -39,7 +39,7 @@ public class RosterConstraintProvider implements ConstraintProvider {
                                                                 shift -> shift.getStartTime(),
                                                                 shift -> shift.getEndTime()),
                                                 // To prevent double counting
-                                                Joiners.lessThan(Shift::getId))
+                                                Joiners.lessThan(Shift::getShiftDayId))
                                 .penalize(HardSoftScore.ONE_HARD)
                                 .asConstraint("Employee cannot work overlapping shifts");
         }

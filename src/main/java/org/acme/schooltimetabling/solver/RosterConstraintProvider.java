@@ -30,14 +30,13 @@ public class RosterConstraintProvider implements ConstraintProvider {
 
         // ! HARD: An employee can only work one shift at a time
         Constraint employeeOverlappingShiftConflict(ConstraintFactory constraintFactory) {
-                return constraintFactory.forEach(Shift.class)
+                return constraintFactory
+                                .forEach(Shift.class)
                                 .join(Shift.class,
                                                 // Join shifts assigned to the same employee
                                                 Joiners.equal(Shift::getAssignedEmployee),
                                                 // Ensure shifts overlap in time
-                                                Joiners.overlapping(
-                                                                shift -> shift.getStartTime(),
-                                                                shift -> shift.getEndTime()),
+                                                Joiners.overlapping(Shift::getStartTime, Shift::getEndTime),
                                                 // To prevent double counting
                                                 Joiners.lessThan(Shift::getShiftDayId))
                                 .penalize(HardSoftScore.ONE_HARD)
